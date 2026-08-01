@@ -132,6 +132,10 @@ def test_featurize_complex_end_to_end_with_dssp():
     graph = featurize_complex(FIXTURE)
     n = len(graph["node_ids"])
     assert graph["node_features"].shape == (n, NODE_WIDTH)
-    # with real DSSP some residues should be non-coil / have nonzero SASA
     ss_block = graph["node_features"][:, AA_WIDTH : AA_WIDTH + SS_WIDTH]
     assert ss_block.sum() == n  # exactly one SS state per node
+    # Guard against a silent DSSP failure (all-coil default): a real assignment on
+    # this structure spans several states and gives a spread of relative SASA.
+    assert len(set(ss_block.argmax(axis=1))) > 1
+    rel_sasa = graph["node_features"][:, AA_WIDTH + SS_WIDTH]
+    assert rel_sasa.max() > 0 and rel_sasa.std() > 0
