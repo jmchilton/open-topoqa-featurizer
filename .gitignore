@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+.venv/
+*.egg-info/
+.pytest_cache/
+build/
+dist/
+# large / licensed oracle data pulled locally, do not commit
+zenodo/
+*.pth
