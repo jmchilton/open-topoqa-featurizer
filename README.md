@@ -25,10 +25,28 @@ correct featurizer diverges from the released checkpoint, matching upstream is a
 
 - ✅ **Topological node core** (`open_topoqa_featurizer.topology`): the 140 element-specific
   persistent-homology features — 7 element channels × 20 summaries. Tested red-to-green on
-  analytically-known point clouds (`tests/test_topology.py`, 9 tests).
-- ⬜ Interface extraction + residue graph (Cα < 10 Å across chains).
-- ⬜ 32 conventional node features (21 one-hot AA, 8-state DSSP, relative SASA, normalized φ/ψ) → node dim 172.
-- ⬜ 11 edge features (Cα distance + 10-bin all-atom distance histogram, `(x, y, z)`).
+  analytically-known point clouds.
+- ✅ **Interface graph + node/edge features** (`open_topoqa_featurizer.graph`): interface
+  extraction (Cα < 10 Å across chains), cross-chain edges, 32 conventional node features
+  (21 one-hot AA · 8-state DSSP · relative SASA · normalized φ/ψ) → node dim **172**, and 11
+  edge features (Cα distance + 10-bin all-atom histogram, correct `(x, y, z)`).
+- ⬜ Packaging (foundry L1 recipe + env) and a retrained scorer (foundry #5).
+
+```python
+from open_topoqa_featurizer.graph import featurize_complex
+g = featurize_complex("complex.pdb")   # runs mkdssp
+g["node_features"]  # (N, 172)   g["edge_index"]  # (E, 2)   g["edge_features"]  # (E, 11)
+```
+
+**DSSP.** Secondary structure (8-state) and relative SASA both come from DSSP (paper-faithful,
+single source), via `Bio.PDB.DSSP` → needs the `mkdssp` binary. The binary is required only for
+that one step: `featurize_complex(pdb, dssp_map=...)` accepts a precomputed
+`(chain, res_id) → (ss, rel_sasa)` map, the injection seam that lets the rest of the graph +
+feature assembly (and its tests) run without mkdssp. The real-DSSP end-to-end test skips when the
+binary is absent.
+
+**Tests.** 18 pass + 1 gated (real DSSP); `tests/fixtures/complex_2fns.pdb` is a public 2-chain
+interface structure exercising the geometry, edges, and 172-dim node assembly.
 
 ## The topological features (paper §3)
 
