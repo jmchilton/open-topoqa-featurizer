@@ -49,13 +49,13 @@ feat = residue_topology_features(elements, coords, ca_coord)  # -> (140,)
 
 ### Documented assumptions (paper does not pin these down)
 
-- **Alpha filtration is GUDHI's squared circumradius**; endpoints are `sqrt`-ed so
-  birth/death live on a **radius** distance (Å) scale, consistent with the 0.01 Å lifetime cut.
-  (Sanity: a radius-3 ring gives an H1 bar dying at ≈ 3.0 — the hole fills at the circumradius.)
-  Note the sibling `open-topodockq-featurizer` uses a **diameter** scale (`2*sqrt`) to match its
-  `.pyc` oracle; here there is no oracle, so we take the more standard radius convention. Because
-  the scorer is retrained (#5), the scale is learnable and this choice is not load-bearing — but it
-  is a deliberate, revisitable convention, not an accident. (Open question in #4.)
+- **Alpha filtration is GUDHI's squared circumradius**; endpoints are `2*sqrt`-ed onto a
+  **diameter** distance (Å) scale. This places a single alpha edge at the full pairwise
+  distance — the same length unit as a VR-H0 edge — so the one shared 0.01 Å lifetime cut
+  applies consistently across H0 and H1. It also matches the sibling `open-topodockq-featurizer`.
+  (Sanity: a radius-3 ring gives an H1 bar dying at ≈ 6.0 = 2× the circumradius.) The scorer is
+  retrained (#5), so this scale is learnable and not load-bearing for accuracy — chosen for
+  cross-featurizer consistency, not to match any oracle.
 - **std is population std (ddof=0).**
 - For VR H0, births are 0, so "death or lifetime" (paper) is the same value; deaths are summarized.
 

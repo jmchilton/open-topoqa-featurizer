@@ -16,8 +16,11 @@ Conventions taken from the paper's §3 / feature description:
   - Summary = (sum, min, max, mean, std) with population std (ddof=0); empty -> zeros.
 
 Assumptions the paper does not pin down explicitly (documented, not guessed silently):
-  - Alpha-complex filtration values are GUDHI's squared circumradii; we take sqrt so
-    birth/death live on a distance (Å) scale, consistent with the 0.01 Å lifetime cut.
+  - Alpha-complex filtration values are GUDHI's squared circumradii; we take ``2*sqrt``
+    so birth/death live on a **diameter** distance (Å) scale. This puts a single alpha
+    edge at the full pairwise distance — the same length unit as the VR-H0 edge — so the
+    one shared 0.01 Å lifetime cut applies consistently across H0 and H1. (Matches the
+    sibling open-topodockq-featurizer's convention.)
   - std is population std (ddof=0).
 """
 
@@ -76,7 +79,7 @@ def _h0_deaths(points: np.ndarray) -> np.ndarray:
 
 
 def _h1_intervals(points: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Alpha H1 (lifetime, birth, death) on a distance scale, lifetime >= 0.01."""
+    """Alpha H1 (lifetime, birth, death) on a diameter distance scale, lifetime >= 0.01."""
     empty = (np.empty(0), np.empty(0), np.empty(0))
     if len(points) < 4:  # an alpha H1 class needs >=4 points to enclose a void
         return empty
@@ -87,9 +90,10 @@ def _h1_intervals(points: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarra
     bars = st.persistence_intervals_in_dimension(1)
     if bars.size == 0:
         return empty
-    # clip guards against CGAL's inexact kernel emitting tiny-negative squared values
-    births = np.sqrt(np.clip(bars[:, 0], 0.0, None))
-    deaths = np.sqrt(np.clip(bars[:, 1], 0.0, None))
+    # 2*sqrt: GUDHI squared circumradii -> diameter distance scale (matches VR-H0's
+    # full-pairwise-distance unit). clip guards CGAL tiny-negative squared values.
+    births = 2.0 * np.sqrt(np.clip(bars[:, 0], 0.0, None))
+    deaths = 2.0 * np.sqrt(np.clip(bars[:, 1], 0.0, None))
     lifetimes = deaths - births
     keep = np.isfinite(deaths) & (lifetimes >= LIFETIME_MIN)
     return lifetimes[keep], births[keep], deaths[keep]
