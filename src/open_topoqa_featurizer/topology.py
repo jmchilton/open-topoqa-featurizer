@@ -23,6 +23,7 @@ Assumptions the paper does not pin down explicitly (documented, not guessed sile
 
 from __future__ import annotations
 
+import gudhi
 import numpy as np
 
 # Seven element selections, processed independently (paper §2 / Figure 2).
@@ -58,7 +59,6 @@ def _h0_deaths(points: np.ndarray) -> np.ndarray:
     """Finite VR H0 death values, filtered to death <= 8 and lifetime >= 0.01."""
     if len(points) < 2:
         return np.empty(0)
-    import gudhi
 
     rips = gudhi.RipsComplex(points=points, max_edge_length=H0_DEATH_MAX)
     st = rips.create_simplex_tree(max_dimension=1)  # edges suffice for H0
@@ -69,6 +69,8 @@ def _h0_deaths(points: np.ndarray) -> np.ndarray:
     births, deaths = bars[:, 0], bars[:, 1]
     finite = np.isfinite(deaths)
     lifetimes = deaths - births
+    # `deaths <= H0_DEATH_MAX` is belt-and-suspenders: max_edge_length already makes
+    # any over-cap merge an infinite (dropped) bar, so `finite` alone suffices today.
     keep = finite & (deaths <= H0_DEATH_MAX) & (lifetimes >= LIFETIME_MIN)
     return deaths[keep]  # births are 0, so death == lifetime here
 
@@ -76,9 +78,8 @@ def _h0_deaths(points: np.ndarray) -> np.ndarray:
 def _h1_intervals(points: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Alpha H1 (lifetime, birth, death) on a distance scale, lifetime >= 0.01."""
     empty = (np.empty(0), np.empty(0), np.empty(0))
-    if len(points) < 4:  # a 1-cycle needs at least a small filled loop
+    if len(points) < 4:  # an alpha H1 class needs >=4 points to enclose a void
         return empty
-    import gudhi
 
     alpha = gudhi.AlphaComplex(points=points)
     st = alpha.create_simplex_tree()  # GUDHI returns squared circumradii
@@ -86,8 +87,9 @@ def _h1_intervals(points: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarra
     bars = st.persistence_intervals_in_dimension(1)
     if bars.size == 0:
         return empty
-    births = np.sqrt(bars[:, 0])
-    deaths = np.sqrt(bars[:, 1])
+    # clip guards against CGAL's inexact kernel emitting tiny-negative squared values
+    births = np.sqrt(np.clip(bars[:, 0], 0.0, None))
+    deaths = np.sqrt(np.clip(bars[:, 1], 0.0, None))
     lifetimes = deaths - births
     keep = np.isfinite(deaths) & (lifetimes >= LIFETIME_MIN)
     return lifetimes[keep], births[keep], deaths[keep]

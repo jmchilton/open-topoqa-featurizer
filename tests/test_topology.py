@@ -50,11 +50,23 @@ def test_h0_death_cap_and_lifetime_filter():
 
 
 def test_h1_ring_single_loop():
-    life, birth, death = _h1_intervals(_jittered_ring())
+    life, birth, death = _h1_intervals(_jittered_ring(radius=3.0))
     assert life.shape == (1,)  # a single dominant 1-cycle
     assert birth[0] > 0
     assert death[0] > birth[0]
     assert life[0] == pytest.approx(death[0] - birth[0], abs=1e-9)
+    # Pins the sqrt/distance-scale assumption: the hole fills at the circumradius (~3),
+    # NOT the squared value (~9). Removing the sqrt in _h1_intervals fails this.
+    assert death[0] == pytest.approx(3.0, abs=0.2)
+
+
+def test_h1_has_no_death_cap():
+    # Spec asymmetry vs H0: H1 bars have no death<=8 filter. A ring whose hole fills
+    # well above 8 Å must still be retained.
+    life, birth, death = _h1_intervals(_jittered_ring(radius=10.0))
+    assert life.shape == (1,)
+    assert death[0] > 8.0  # would be dropped if an H0-style death cap leaked into H1
+    assert death[0] == pytest.approx(10.0, abs=0.5)
 
 
 def test_channel_features_shape_and_empty():
