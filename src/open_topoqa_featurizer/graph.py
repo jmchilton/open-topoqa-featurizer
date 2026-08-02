@@ -19,10 +19,12 @@ the released code's (x, y, y) coordinate defect (correct by construction here).
 
 from __future__ import annotations
 
+import os
 import shutil
+import tempfile
 
 import numpy as np
-from Bio.PDB import PDBParser
+from Bio.PDB import PDBIO, PDBParser
 from Bio.PDB.Polypeptide import PPBuilder
 
 from open_topoqa_featurizer.topology import residue_topology_features
@@ -167,23 +169,37 @@ def phi_psi_map(model) -> dict:
     return out
 
 
-def run_dssp(model, pdb_path: str) -> dict:
+def run_dssp(model, pdb_path: str | None = None) -> dict:
     """Map (chain_id, res_id) -> (ss8_char, rel_sasa) via mkdssp.
 
     Requires the mkdssp binary. Raises RuntimeError if it is unavailable.
+
+    DSSP runs on a copy of ``model`` re-serialized through Biopython's ``PDBIO``, not on the
+    original file: mkdssp's strict fixed-column parser rejects some minimally-formatted decoy
+    PDBs (unpadded records, residues it reports it "could not map"), while the round-tripped copy
+    is canonical and parses cleanly. ``pdb_path`` is accepted for backward compatibility but
+    ignored — the parsed ``model`` is the sole source of coordinates.
     """
     if shutil.which("mkdssp") is None and shutil.which("dssp") is None:
         raise RuntimeError("mkdssp/dssp binary not found on PATH")
     from Bio.PDB.DSSP import DSSP
 
-    dssp = DSSP(model, pdb_path)
-    out = {}
-    for key in dssp.keys():
-        chain_id, res_id = key
-        _dssp_index, _aa, ss, rel_asa = dssp[key][:4]
-        rel = 0.0 if rel_asa in ("NA", None) else float(rel_asa)
-        out[(chain_id, res_id)] = (ss if ss != " " else "-", rel)
-    return out
+    io = PDBIO()
+    io.set_structure(model)
+    fd, norm_path = tempfile.mkstemp(suffix=".pdb")
+    os.close(fd)
+    try:
+        io.save(norm_path)
+        dssp = DSSP(model, norm_path)
+        out = {}
+        for key in dssp.keys():
+            chain_id, res_id = key
+            _dssp_index, _aa, ss, rel_asa = dssp[key][:4]
+            rel = 0.0 if rel_asa in ("NA", None) else float(rel_asa)
+            out[(chain_id, res_id)] = (ss if ss != " " else "-", rel)
+        return out
+    finally:
+        os.unlink(norm_path)
 
 
 def featurize_complex(pdb_path: str, dssp_map: dict | None = None) -> dict:
@@ -199,7 +215,7 @@ def featurize_complex(pdb_path: str, dssp_map: dict | None = None) -> dict:
     edges = residue_edges(nodes)
     elements, coords = _structure_cno_atoms(model)
     angles = phi_psi_map(model)
-    dssp = run_dssp(model, pdb_path) if dssp_map is None else dssp_map
+    dssp = run_dssp(model) if dssp_map is None else dssp_map
 
     node_feats, node_ids = [], []
     for chain_id, residue in nodes:

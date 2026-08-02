@@ -23,6 +23,7 @@ from open_topoqa_featurizer.graph import (
     interface_nodes,
     parse_structure,
     residue_edges,
+    run_dssp,
 )
 
 FIXTURE = str(Path(__file__).parent / "fixtures" / "complex_2fns.pdb")
@@ -139,3 +140,19 @@ def test_featurize_complex_end_to_end_with_dssp():
     assert len(set(ss_block.argmax(axis=1))) > 1
     rel_sasa = graph["node_features"][:, AA_WIDTH + SS_WIDTH]
     assert rel_sasa.max() > 0 and rel_sasa.std() > 0
+
+
+@pytest.mark.skipif(
+    shutil.which("mkdssp") is None and shutil.which("dssp") is None,
+    reason="mkdssp binary not available",
+)
+def test_run_dssp_normalizes_and_ignores_raw_file(model, tmp_path):
+    # run_dssp drives DSSP off the parsed model (re-serialized), NOT the raw bytes at pdb_path.
+    # Point it at a garbage file: mkdssp on those bytes would fail ("DSSP failed to produce an
+    # output"); succeeding proves DSSP ran on the normalized model. This is what rescues the
+    # minimally-formatted docking decoys mkdssp rejects when handed the file directly.
+    garbage = tmp_path / "not_a_structure.pdb"
+    garbage.write_text("this is not a valid PDB or mmCIF file\n")
+    dssp = run_dssp(model, str(garbage))
+    assert dssp, "run_dssp returned no residues"
+    assert len({ss for ss, _rel in dssp.values()}) > 1  # real SS assignment, not all-coil
